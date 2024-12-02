@@ -44,4 +44,12 @@ public class StreamManifest(IReadOnlyList<IStreamInfo> streams)
     /// </summary>
     public IEnumerable<VideoOnlyStreamInfo> GetVideoOnlyStreams() =>
         GetVideoStreams().OfType<VideoOnlyStreamInfo>();
+
+    /// <summary>
+    /// Filters audio streams by language.
+    /// </summary>
+    /// <param name="language">The language to filter by (case-sensitive).</param>
+    /// <returns>A collection of audio streams in the specified language.</returns>
+    public IEnumerable<IAudioStreamInfo> GetAudioStreamsByLanguage(string language) =>
+        GetAudioStreams().Where(stream => stream.Language == language);
 }
