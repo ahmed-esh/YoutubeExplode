@@ -125,4 +125,22 @@ public class VideoSpecs(ITestOutputHelper testOutput)
         // Assert
         thumbnail.Url.Should().NotBeNullOrWhiteSpace();
     }
+
+    [Fact]
+    public async Task I_can_get_the_language_of_audio_streams()
+    {
+        // Arrange
+        var youtube = new YoutubeClient();
+
+        // Act
+        var streamManifest = await youtube.Videos.Streams.GetManifestAsync(VideoIds.Normal);
+        var audioStreams = streamManifest.GetAudioStreams();
+
+        // Assert
+        foreach (var stream in audioStreams)
+        {
+            stream.Language.Should().NotBeNullOrWhiteSpace(); // Ensure the Language property is populated
+            testOutput.WriteLine($"Stream Codec: {stream.AudioCodec}, Language: {stream.Language}");
+        }
+    }
 }
