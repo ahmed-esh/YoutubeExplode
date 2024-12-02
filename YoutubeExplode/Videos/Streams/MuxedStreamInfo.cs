@@ -14,7 +14,8 @@ public class MuxedStreamInfo(
     string audioCodec,
     string videoCodec,
     VideoQuality videoQuality,
-    Resolution videoResolution
+    Resolution videoResolution,
+    string? language // Add a new parameter for language
 ) : IAudioStreamInfo, IVideoStreamInfo
 {
     /// <inheritdoc />
@@ -41,7 +42,13 @@ public class MuxedStreamInfo(
     /// <inheritdoc />
     public Resolution VideoResolution { get; } = videoResolution;
 
+    /// <summary>
+    /// Language information of the audio stream, if available.
+    /// </summary>
+    public string? Language { get; } = language; // Define and initialize the Language property
+
     /// <inheritdoc />
     [ExcludeFromCodeCoverage]
-    public override string ToString() => $"Muxed ({VideoQuality} | {Container})";
+    public override string ToString() =>
+        $"Muxed ({VideoQuality} | {Container} | Language: {Language ?? "Unknown"})";
 }
