@@ -23,8 +23,6 @@ public class StreamClient(HttpClient http)
 {
     private readonly StreamController _controller = new(http);
 
-    // Because we determine the player version ourselves, it's safe to cache the cipher manifest
-    // for the entire lifetime of the client.
     private CipherManifest? _cipherManifest;
 
     private async ValueTask<CipherManifest> ResolveCipherManifestAsync(
@@ -49,14 +47,11 @@ public class StreamClient(HttpClient http)
     {
         var contentLength = streamData.ContentLength;
 
-        // If content length is not available in the metadata, get it by
-        // sending a HEAD request and parsing the Content-Length header.
         if (contentLength is null)
         {
             using var response = await http.HeadAsync(url, cancellationToken);
             contentLength = response.Content.Headers.ContentLength;
 
-            // 404 error indicates that the stream is not available
             if (response.StatusCode == HttpStatusCode.NotFound)
                 return null;
 
@@ -65,16 +60,12 @@ public class StreamClient(HttpClient http)
 
         if (contentLength is not null)
         {
-            // Streams may have mismatched content length, so ensure that the obtained value is correct
-            // https://github.com/Tyrrrz/YoutubeExplode/issues/759
             using var response = await http.GetAsync(
-                // Try to access the last byte of the stream
                 MediaStream.GetSegmentUrl(url, contentLength.Value - 2, contentLength.Value - 1),
                 HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken
             );
 
-            // 404 error indicates that the stream has mismatched content length or is not available
             if (response.StatusCode == HttpStatusCode.NotFound)
                 return null;
 
@@ -99,7 +90,6 @@ public class StreamClient(HttpClient http)
                 streamData.Url
                 ?? throw new YoutubeExplodeException("Failed to extract the stream URL.");
 
-            // Handle cipher-protected streams
             if (!string.IsNullOrWhiteSpace(streamData.Signature))
             {
                 var cipherManifest = await ResolveCipherManifestAsync(cancellationToken);
@@ -123,10 +113,8 @@ public class StreamClient(HttpClient http)
                 streamData.Bitrate?.Pipe(s => new Bitrate(s))
                 ?? throw new YoutubeExplodeException("Failed to extract the stream bitrate.");
 
-            // Extract language if available
             var language = streamData.AudioTrack?.DisplayName;
 
-            // Muxed or video-only stream
             if (!string.IsNullOrWhiteSpace(streamData.VideoCodec))
             {
                 var framerate = streamData.VideoFramerate ?? 24;
@@ -140,7 +128,6 @@ public class StreamClient(HttpClient http)
                         ? new Resolution(streamData.VideoWidth.Value, streamData.VideoHeight.Value)
                         : videoQuality.GetDefaultVideoResolution();
 
-                // Muxed
                 if (!string.IsNullOrWhiteSpace(streamData.AudioCodec))
                 {
                     var streamInfo = new MuxedStreamInfo(
@@ -152,12 +139,11 @@ public class StreamClient(HttpClient http)
                         streamData.VideoCodec,
                         videoQuality,
                         videoResolution,
-                        language // Pass language
+                        language
                     );
 
                     yield return streamInfo;
                 }
-                // Video-only
                 else
                 {
                     var streamInfo = new VideoOnlyStreamInfo(
@@ -173,7 +159,6 @@ public class StreamClient(HttpClient http)
                     yield return streamInfo;
                 }
             }
-            // Audio-only
             else if (!string.IsNullOrWhiteSpace(streamData.AudioCodec))
             {
                 var streamInfo = new AudioOnlyStreamInfo(
@@ -182,7 +167,7 @@ public class StreamClient(HttpClient http)
                     new FileSize(contentLength.Value),
                     bitrate,
                     streamData.AudioCodec,
-                    language // Pass language
+                    language
                 );
 
                 yield return streamInfo;
@@ -202,7 +187,6 @@ public class StreamClient(HttpClient http)
     {
         var streamInfos = new List<IStreamInfo>();
 
-        // Video is pay-to-play
         if (!string.IsNullOrWhiteSpace(playerResponse.PreviewVideoId))
         {
             throw new VideoRequiresPurchaseException(
@@ -211,7 +195,6 @@ public class StreamClient(HttpClient http)
             );
         }
 
-        // Video is unplayable
         if (!playerResponse.IsPlayable)
         {
             throw new VideoUnplayableException(
@@ -219,10 +202,8 @@ public class StreamClient(HttpClient http)
             );
         }
 
-        // Extract streams from the player response
         streamInfos.AddRange(await GetStreamInfosAsync(playerResponse.Streams, cancellationToken));
 
-        // Extract streams from the DASH manifest
         if (!string.IsNullOrWhiteSpace(playerResponse.DashManifestUrl))
         {
             try
@@ -236,12 +217,9 @@ public class StreamClient(HttpClient http)
                     await GetStreamInfosAsync(dashManifest.Streams, cancellationToken)
                 );
             }
-            // Some DASH manifest URLs return 404 for whatever reason
-            // https://github.com/Tyrrrz/YoutubeExplode/issues/728
             catch (HttpRequestException) { }
         }
 
-        // Error if no streams were found
         if (!streamInfos.Any())
         {
             throw new VideoUnplayableException(
@@ -252,39 +230,6 @@ public class StreamClient(HttpClient http)
         return streamInfos;
     }
 
-    private async ValueTask<IReadOnlyList<IStreamInfo>> GetStreamInfosAsync(
-        VideoId videoId,
-        CancellationToken cancellationToken = default
-    )
-    {
-        try
-        {
-            // Try to get player response from a cipher-less client
-            var playerResponse = await _controller.GetPlayerResponseAsync(
-                videoId,
-                cancellationToken
-            );
-
-            return await GetStreamInfosAsync(videoId, playerResponse, cancellationToken);
-        }
-        catch (VideoUnplayableException)
-        {
-            // Try to get player response from a client with cipher
-            var cipherManifest = await ResolveCipherManifestAsync(cancellationToken);
-
-            var playerResponse = await _controller.GetPlayerResponseAsync(
-                videoId,
-                cipherManifest.SignatureTimestamp,
-                cancellationToken
-            );
-
-            return await GetStreamInfosAsync(videoId, playerResponse, cancellationToken);
-        }
-    }
-
-    /// <summary>
-    /// Gets the manifest that lists available streams for the specified video.
-    /// </summary>
     public async ValueTask<StreamManifest> GetManifestAsync(
         VideoId videoId,
         CancellationToken cancellationToken = default
@@ -296,77 +241,8 @@ public class StreamClient(HttpClient http)
             {
                 return new StreamManifest(await GetStreamInfosAsync(videoId, cancellationToken));
             }
-            // Retry on connectivity issues
             catch (Exception ex)
                 when (ex is HttpRequestException or IOException && retriesRemaining > 0) { }
         }
-    }
-
-    /// <summary>
-    /// Gets the HTTP Live Stream (HLS) manifest URL for the specified video (if it is a livestream).
-    /// </summary>
-    public async ValueTask<string> GetHttpLiveStreamUrlAsync(
-        VideoId videoId,
-        CancellationToken cancellationToken = default
-    )
-    {
-        var playerResponse = await _controller.GetPlayerResponseAsync(videoId, cancellationToken);
-        if (!playerResponse.IsPlayable)
-        {
-            throw new VideoUnplayableException(
-                $"Video '{videoId}' is unplayable. Reason: '{playerResponse.PlayabilityError}'."
-            );
-        }
-
-        if (string.IsNullOrWhiteSpace(playerResponse.HlsManifestUrl))
-        {
-            throw new YoutubeExplodeException(
-                $"Failed to extract the HTTP Live Stream manifest URL. Video '{videoId}' is likely not a live stream."
-            );
-        }
-
-        return playerResponse.HlsManifestUrl;
-    }
-
-    /// <summary>
-    /// Gets the stream identified by the specified metadata.
-    /// </summary>
-    public async ValueTask<Stream> GetAsync(
-        IStreamInfo streamInfo,
-        CancellationToken cancellationToken = default
-    )
-    {
-        var stream = new MediaStream(http, streamInfo);
-        await stream.InitializeAsync(cancellationToken);
-
-        return stream;
-    }
-
-    /// <summary>
-    /// Copies the stream identified by the specified metadata to the specified stream.
-    /// </summary>
-    public async ValueTask CopyToAsync(
-        IStreamInfo streamInfo,
-        Stream destination,
-        IProgress<double>? progress = null,
-        CancellationToken cancellationToken = default
-    )
-    {
-        using var input = await GetAsync(streamInfo, cancellationToken);
-        await input.CopyToAsync(destination, progress, cancellationToken);
-    }
-
-    /// <summary>
-    /// Downloads the stream identified by the specified metadata to the specified file.
-    /// </summary>
-    public async ValueTask DownloadAsync(
-        IStreamInfo streamInfo,
-        string filePath,
-        IProgress<double>? progress = null,
-        CancellationToken cancellationToken = default
-    )
-    {
-        using var destination = File.Create(filePath);
-        await CopyToAsync(streamInfo, destination, progress, cancellationToken);
     }
 }
