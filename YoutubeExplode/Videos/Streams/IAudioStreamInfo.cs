@@ -9,4 +9,7 @@ public interface IAudioStreamInfo : IStreamInfo
     /// Audio codec.
     /// </summary>
     string AudioCodec { get; }
+    
+    // New property to expose language information
+    string? Language { get; } // Nullable to handle cases where language data is unavailable
 }
