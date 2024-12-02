@@ -103,10 +103,6 @@ internal partial class PlayerResponse(JsonElement content)
             ?.GetPropertyOrNull("playerResponse")
             ?.GetStringOrNull()
             ?
-            // YouTube uses weird base64-like encoding here that I don't know how to deal with.
-            // It's supposed to have JSON inside, but if extracted as is, it contains garbage.
-            // Luckily, some of the text gets decoded correctly, which is enough for us to
-            // extract the preview video ID using regex.
             .Replace('-', '+')
             .Replace('_', '/')
             .Pipe(Convert.FromBase64String)
@@ -161,6 +157,11 @@ internal partial class PlayerResponse(JsonElement content)
             ?.EnumerateArrayOrNull()
             ?.Select(j => new ClosedCaptionTrackData(j))
             .ToArray() ?? [];
+}
+
+public class AudioTrack
+{
+    public string DisplayName { get; set; } = string.Empty;
 }
 
 internal partial class PlayerResponse
@@ -273,6 +274,14 @@ internal partial class PlayerResponse
 
         [Lazy]
         public int? VideoFramerate => content.GetPropertyOrNull("fps")?.GetInt32OrNull();
+
+        [Lazy]
+        public AudioTrack? AudioTrack =>
+            content.GetPropertyOrNull("audioTrack")
+                ?.Pipe(a => new AudioTrack
+                {
+                    DisplayName = a.GetPropertyOrNull("displayName")?.GetStringOrNull() ?? string.Empty
+                });
     }
 }
 
