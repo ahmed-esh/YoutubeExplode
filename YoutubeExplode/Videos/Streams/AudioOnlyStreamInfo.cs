@@ -10,7 +10,8 @@ public class AudioOnlyStreamInfo(
     Container container,
     FileSize size,
     Bitrate bitrate,
-    string audioCodec
+    string audioCodec,
+    string? language // Add a new parameter for language
 ) : IAudioStreamInfo
 {
     /// <inheritdoc />
@@ -28,7 +29,12 @@ public class AudioOnlyStreamInfo(
     /// <inheritdoc />
     public string AudioCodec { get; } = audioCodec;
 
+    /// <summary>
+    /// Language information of the audio stream, if available.
+    /// </summary>
+    public string? Language { get; } = language; // Define and initialize the Language property
+
     /// <inheritdoc />
     [ExcludeFromCodeCoverage]
-    public override string ToString() => $"Audio-only ({Container})";
+    public override string ToString() => $"Audio-only ({Container}, Language: {Language ?? "Unknown"})";
 }
