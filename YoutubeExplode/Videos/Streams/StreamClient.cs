@@ -123,6 +123,9 @@ public class StreamClient(HttpClient http)
                 streamData.Bitrate?.Pipe(s => new Bitrate(s))
                 ?? throw new YoutubeExplodeException("Failed to extract the stream bitrate.");
 
+            // Extract language if available
+            var language = streamData.AudioTrack?.DisplayName;
+
             // Muxed or video-only stream
             if (!string.IsNullOrWhiteSpace(streamData.VideoCodec))
             {
@@ -148,7 +151,8 @@ public class StreamClient(HttpClient http)
                         streamData.AudioCodec,
                         streamData.VideoCodec,
                         videoQuality,
-                        videoResolution
+                        videoResolution,
+                        language // Pass language
                     );
 
                     yield return streamInfo;
@@ -177,7 +181,8 @@ public class StreamClient(HttpClient http)
                     container,
                     new FileSize(contentLength.Value),
                     bitrate,
-                    streamData.AudioCodec
+                    streamData.AudioCodec,
+                    language // Pass language
                 );
 
                 yield return streamInfo;
