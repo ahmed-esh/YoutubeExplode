@@ -159,11 +159,6 @@ internal partial class PlayerResponse(JsonElement content)
             .ToArray() ?? [];
 }
 
-public class AudioTrack
-{
-    public string DisplayName { get; set; } = string.Empty;
-}
-
 internal partial class PlayerResponse
 {
     public class ClosedCaptionTrackData(JsonElement content)
