@@ -83,6 +83,9 @@ internal partial class DashManifest
 
         [Lazy]
         public int? VideoFramerate => (int?)content.Attribute("frameRate");
+
+        [Lazy]
+        public AudioTrack? AudioTrack => null; // DASH manifests don't provide audioTrack metadata
     }
 }
 
