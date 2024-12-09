@@ -167,10 +167,12 @@ public class PlaylistClient(HttpClient http)
             if (!videos.Any())
                 break;
 
-            yield return Batch.Create(videos);
-
+            // Update visitorData for subsequent calls
             visitorData ??= response.VisitorData;
-        } while (true);
+
+            // Yield the current batch of videos
+            yield return Batch.Create(videos);
+        } while (lastVideoId != null); // Ensure the loop continues until no more videos are available
     }
 
     /// <summary>
